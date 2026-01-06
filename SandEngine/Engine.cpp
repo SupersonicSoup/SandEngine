@@ -1,4 +1,9 @@
 #include "Engine.h"
+#include "Texture.h"
+#include "SpriteRenderer.h"
+
+Texture* testTexture;
+SpriteRenderer* renderer;
 
 int Engine::Initialize(std::string title)
 {
@@ -16,6 +21,7 @@ int Engine::Initialize(std::string title)
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
+
 	window = glfwCreateWindow(WindowWidth, WindowHeight, "Falling Sand", NULL, NULL);
 
 	if (!window)
@@ -25,10 +31,34 @@ int Engine::Initialize(std::string title)
 		return -1;
 	}
 
+	glfwSetWindowSizeCallback(window, OnWindowResize);
+	
+
 	glfwMakeContextCurrent(window);
 	gladLoadGL();
 	glfwSwapInterval(0);
 	glViewport(0, 0, WindowWidth, WindowHeight);
+
+	//glEnable(GL_BLEND);
+	//glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	//glDepthFunc(GL_LEQUAL);
+
+	
+
+	InitShaders();
+	renderer = new SpriteRenderer(ShaderManager::GetShaderByName("default")->ID);
+	testTexture = new Texture("resources/textures/test2.png");
+}
+
+int Engine::InitShaders()
+{
+	log::println("LOADING SHADERS..");
+
+	ShaderManager::LoadAll("resources/shaders/");
+
+	check_gl_error();
+
+	return 1;
 }
 
 void Engine::Step()
@@ -41,7 +71,16 @@ void Engine::Step()
 	glClearColor(1.0f, 0.0f, 0.0f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT);
 
+	renderer->DrawSprite(testTexture);
+
 	glfwSwapBuffers(window);
 	glfwPollEvents();
 
+}
+
+void Engine::OnWindowResize(GLFWwindow* window, int width, int height)
+{
+	WindowWidth = width;
+	WindowHeight = height;
+	glViewport(0, 0, WindowWidth, WindowHeight);
 }

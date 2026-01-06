@@ -3,6 +3,7 @@
 #include "glad/glad.h"
 #include "GLFW/glfw3.h"
 #include "GLError.h"
+#include "ShaderManager.h"
 
 class Engine
 {
@@ -17,7 +18,9 @@ public:
 	}
 
 	static int Initialize(std::string title);
+	static int InitShaders();
 	static void Step();
+	static void OnWindowResize(GLFWwindow* window, int width, int height);
 	static bool ShouldClose()
 	{
 		return glfwWindowShouldClose(window);
@@ -28,8 +31,9 @@ public:
 		return window;
 	}
 
-private:
 	inline static int WindowWidth = 320;
 	inline static int WindowHeight = 240;
+
+private:
 	inline static GLFWwindow* window;
 };
