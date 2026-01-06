@@ -5,6 +5,7 @@ class ShaderManager
 {
 public:
 	static void Load(std::string name, const char* vert, const char* frag);
+	static void Load(std::string name, const char* comp);
 	static void LoadAll(std::string root);
 	static Shader* GetShaderByName(const char* name);
 	static Shader* GetShaderByID(long id);

@@ -10,6 +10,13 @@ void ShaderManager::Load(std::string name, const char* vert, const char* frag)
 	shaders.insert(std::make_pair(shader->ID, shader));
 }
 
+void ShaderManager::Load(std::string name, const char* comp)
+{
+	Shader* shader = new Shader(comp);
+	shader->name = name;
+	shaders.insert(std::make_pair(shader->ID, shader));
+}
+
 void ShaderManager::LoadAll(std::string root)
 {
 	for (const auto& entry : fs::directory_iterator(root))
@@ -24,6 +31,16 @@ void ShaderManager::LoadAll(std::string root)
 				std::string fragPath = entry.path().string();
 
 				Load(filename, vertPath.c_str(), std::regex_replace(fragPath, std::regex(".vert"), ".frag").c_str());
+			}
+			if (entry.path().extension() == ".comp")
+			{
+				std::string filename = entry.path().filename().string();
+				filename = filename.substr(0, filename.find_last_of("."));
+
+				std::string compPath = entry.path().string();
+				std::string fragPath = entry.path().string();
+
+				Load(filename, compPath.c_str());
 			}
 		}
 }

@@ -3,5 +3,5 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
-  <Project Path="SandEngine.vcxproj" />
+  <Project Path="SandEngine.vcxproj" Id="ae520680-dfb9-43a0-8969-b9a22bcf3f73" />
 </Solution>

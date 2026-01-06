@@ -6,6 +6,24 @@ Texture::Texture() {
 	glBindTexture(GL_TEXTURE_2D, ID);
 };
 
+Texture::Texture(int w, int h)
+{
+	width = w;
+	height = h;
+	channels = 4;
+	glGenTextures(1, &ID);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, ID);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width, height, 0, GL_RGBA, GL_FLOAT, NULL);
+	glGenerateMipmap(GL_TEXTURE_2D);
+
+	glBindImageTexture(0, ID, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA32F);
+}
+
 Texture::Texture(const char* filename)
 {
 	glGenTextures(1, &ID);
@@ -59,7 +77,14 @@ void Texture::SetTiling(bool _tile)
 
 void Texture::Bind()
 {
+	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, ID);
+}
+
+void Texture::BindImage()
+{
+	glActiveTexture(GL_TEXTURE0);
+	glBindImageTexture(0, ID, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA32F);
 }
 
 void Texture::Unbind()

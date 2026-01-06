@@ -58,6 +58,34 @@ Shader::Shader(const char* vert, const char* frag)
 	}
 }
 
+Shader::Shader(const char* compute)
+{
+	std::string _compute = get_file_contents(compute);
+
+	const char* cmpSrc = _compute.c_str();
+
+	GLint shaderSuccess;
+
+	GLuint compShader = glCreateShader(GL_COMPUTE_SHADER);
+	glShaderSource(compShader, 1, &cmpSrc, NULL);
+	glCompileShader(compShader);
+	checkErrors(compShader, "COMPUTE", shaderSuccess);
+
+	ID = glCreateProgram();
+	glAttachShader(ID, compShader);
+	glLinkProgram(ID);
+	checkErrors(ID, "PROGRAM", shaderSuccess);
+
+	if (shaderSuccess)
+	{
+		std::cout << " [Shader Manager] Loaded " << compute << std::endl;
+	}
+	else
+	{
+		std::cout << "SHADER COMPILATION FAILED" << std::endl;
+	}
+}
+
 void Shader::Activate()
 {
 	glUseProgram(ID);
@@ -73,9 +101,15 @@ void Shader::SetMatrix(const char* uniform, glm::mat4 matrix)
 	glUniformMatrix4fv(glGetUniformLocation(ID, uniform), 1, GL_FALSE, glm::value_ptr(matrix));
 }
 
+// TODO: Cache glGetUniformLocation on shader creation?
 void Shader::SetFloat(const char* uniform, float f)
 {
 	glUniform1f(glGetUniformLocation(ID, uniform), f);
+}
+
+void Shader::SetInt(const char* uniform, int i)
+{
+	glUniform1i(glGetUniformLocation(ID, uniform), i);
 }
 
 void Shader::SetVec2(const char* uniform, glm::vec2 vec)
@@ -91,6 +125,13 @@ void Shader::SetVec3(const char* uniform, glm::vec3 vec)
 void Shader::SetVec4(const char* uniform, glm::vec4 vec)
 {
 	glUniform4f(glGetUniformLocation(ID, uniform), vec.x, vec.y, vec.z, vec.w);
+}
+
+void Shader::Execute(int width, int height)
+{
+	glDispatchCompute((unsigned int)width, (unsigned int)height, 1);
+
+	glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 }
 
 // Checks if the different Shaders have compiled properly

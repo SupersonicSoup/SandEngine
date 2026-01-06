@@ -14,12 +14,14 @@ public:
 	int channels;
 	bool tile = false;
 	void Bind();
+	void BindImage();
 	void Unbind();
 
 	Texture();
 	Texture(const char* filename);
 	Texture(unsigned char*& data, const char* filename);
 	Texture(unsigned char*& data);
+	Texture(int width, int height);
 	void SetData(unsigned char* data);
 	void SetTiling(bool _tile);
 private:

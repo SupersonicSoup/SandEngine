@@ -4,6 +4,8 @@
 
 Texture* testTexture;
 SpriteRenderer* renderer;
+Shader* computeShader;
+Texture* computeShaderTexture;
 
 int Engine::Initialize(std::string title)
 {
@@ -39,15 +41,22 @@ int Engine::Initialize(std::string title)
 	glfwSwapInterval(0);
 	glViewport(0, 0, WindowWidth, WindowHeight);
 
-	//glEnable(GL_BLEND);
-	//glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-	//glDepthFunc(GL_LEQUAL);
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	glDepthFunc(GL_LEQUAL);
 
 	
 
 	InitShaders();
 	renderer = new SpriteRenderer(ShaderManager::GetShaderByName("default")->ID);
-	testTexture = new Texture("resources/textures/test2.png");
+	computeShader = ShaderManager::GetShaderByName("computeTest");
+	computeShaderTexture = new Texture(WindowWidth / 4, WindowHeight / 4);
+	ShaderManager::GetShaderByName("default")->Activate();
+	ShaderManager::GetShaderByName("default")->SetInt("img", 0);
+	computeShaderTexture->Bind();
+
+
+	//testTexture = new Texture("resources/textures/test2.png");
 }
 
 int Engine::InitShaders()
@@ -69,9 +78,21 @@ void Engine::Step()
 	}
 
 	glClearColor(1.0f, 0.0f, 0.0f, 1.0f);
-	glClear(GL_COLOR_BUFFER_BIT);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	renderer->DrawSprite(testTexture);
+
+
+	
+	computeShader->Activate();
+	computeShader->Execute(WindowWidth / 4, WindowHeight / 4);
+
+	renderer->DrawSprite(computeShaderTexture, glm::vec2(0), glm::vec2(4));
+
+
+
+
+
+	//renderer->DrawSprite(testTexture);
 
 	glfwSwapBuffers(window);
 	glfwPollEvents();
