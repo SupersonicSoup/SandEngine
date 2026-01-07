@@ -95,13 +95,27 @@ void Engine::Step()
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 
-	computeShader->SetInt("windowWidth", Engine::WindowWidth / Engine::Downscaling);
-	computeShader->SetInt("windowHeight", Engine::WindowWidth / Engine::Downscaling);
-
 	if (Time::time > lastFrameTime + 0.016f)
 	{
-
 		computeShader->Activate();
+
+		computeShader->SetInt("windowWidth", Engine::WindowWidth / Engine::Downscaling);
+		computeShader->SetInt("windowHeight", Engine::WindowHeight / Engine::Downscaling);
+
+		int leftClick = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT);
+		computeShader->SetInt("leftClick", leftClick == GLFW_PRESS);
+
+		int rightClick = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT);
+		computeShader->SetInt("rightClick", rightClick == GLFW_PRESS);
+
+		double xpos, ypos;
+		glfwGetCursorPos(window, &xpos, &ypos);
+		int mousex = (int)(xpos / Downscaling);
+		int mousey = (int)(ypos / Downscaling);
+
+		computeShader->SetInt("mouseX", mousex);
+		computeShader->SetInt("mouseY", mousey);
+		log::println(std::to_string(mousex) + ", " + std::to_string(mousey));
 
 
 		// upload c_data to the shader

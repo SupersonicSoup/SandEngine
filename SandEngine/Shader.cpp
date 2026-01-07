@@ -111,7 +111,6 @@ void Shader::SetMatrix(const char* uniform, glm::mat4 matrix)
 	glUniformMatrix4fv(glGetUniformLocation(ID, uniform), 1, GL_FALSE, glm::value_ptr(matrix));
 }
 
-// TODO: Cache glGetUniformLocation on shader creation?
 void Shader::SetFloat(const char* uniform, float f)
 {
 	glUniform1f(glGetUniformLocation(ID, uniform), f);

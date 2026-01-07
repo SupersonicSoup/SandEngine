@@ -4,9 +4,14 @@
 layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 layout (rgba32f, binding = 0) uniform image2D img;
 
-// TODO: SET WINDOW WIDTH AND HEIGHT
 uniform int windowWidth = 0;
 uniform int windowHeight = 0;
+
+uniform int mouseX = 0;
+uniform int mouseY = 0;
+
+uniform int leftClick = 0;
+uniform int rightClick = 0;
 
 float rand(vec2 co){
     return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
@@ -63,10 +68,19 @@ void main() {
 	int index = (pos.y * windowWidth) + pos.x;
 	Particle current = getParticleAt(pos.x, pos.y);
 
-	ivec2 cursorPosition = ivec2(windowWidth / 2, windowHeight / 2);
 
-	if(length(cursorPosition - pos) < 20) {
-		setParticleAt(pos.x, pos.y, 2);
+	if(leftClick) {
+		ivec2 cursorPos = ivec2(mouseX, windowHeight - mouseY);
+		if(length(cursorPos - pos) < 3) {
+			setParticleAt(pos.x, pos.y, 2);
+		}
+	}
+
+	if(rightClick) {
+		ivec2 cursorPos = ivec2(mouseX, windowHeight - mouseY);
+		if(length(cursorPos - pos) < 5) {
+			setParticleAt(pos.x, pos.y, 0);
+		}
 	}
 
 	//m_parts[index] = current;
