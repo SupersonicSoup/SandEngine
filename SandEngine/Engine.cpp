@@ -98,7 +98,7 @@ void Engine::Step()
 	computeShader->SetInt("windowWidth", Engine::WindowWidth / Engine::Downscaling);
 	computeShader->SetInt("windowHeight", Engine::WindowWidth / Engine::Downscaling);
 
-	if (Time::time > lastFrameTime + 0.0f)
+	if (Time::time > lastFrameTime + 0.016f)
 	{
 
 		computeShader->Activate();

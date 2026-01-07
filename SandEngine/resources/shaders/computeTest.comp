@@ -37,7 +37,7 @@ Particle getParticleAt(int x, int y)
 	if(y >= windowHeight || y < 0 || x < 0 || x >= windowWidth)
 	{
 		Particle solid;
-		solid.id = 2;
+		solid.id = 1;
 		return solid;
 	}
 	int index = (y * windowWidth) + x;
@@ -56,17 +56,6 @@ void setParticleAt(int x, int y, int id)
 	m_parts[index] = p;
 };
 
-bool AtomicCheckUnclaimed(int x, int y)
-{
-	if(y >= windowHeight || y < 0 || x < 0 || x >= windowWidth)
-	{
-		return false;
-	}
-	uint index = (y * windowWidth) + x;
-	uint previous = atomicCompSwap(claims[index], 0, 1);
-	return previous == 0;
-}
-
 void main() {
 	vec4 color = vec4(1.0, 0.0, 0.0, 1.0);
 	ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
@@ -74,9 +63,10 @@ void main() {
 	int index = (pos.y * windowWidth) + pos.x;
 	Particle current = getParticleAt(pos.x, pos.y);
 
-	if(pos.x == windowWidth / 3 && pos.y == windowHeight / 3)
-	{
-		setParticleAt(pos.x, pos.y, 1);
+	ivec2 cursorPosition = ivec2(windowWidth / 2, windowHeight / 2);
+
+	if(length(cursorPosition - pos) < 20) {
+		setParticleAt(pos.x, pos.y, 2);
 	}
 
 	//m_parts[index] = current;
@@ -91,22 +81,25 @@ void main() {
 	Particle downleft = getParticleAt(pos.x - 1, pos.y - 1);
 	Particle downright = getParticleAt(pos.x + 1, pos.y - 1);
 
+	// If the current cell is empty
 	if(current.id == 0) {
-		if(up.id == 1)
+		// But the one above it isn't
+		if(up.id > 1)
 		{
 			setParticleAt(pos.x, pos.y, up.id);
-			//setParticleAt(pos.x, pos.y + 1, 0);
-		} 
-		else if(upleft.id == 1 && left.id == 1)
-		{
-			setParticleAt(pos.x, pos.y, upleft.id);
-			//setParticleAt(pos.x - 1, pos.y + 1, 0);
 		}
-		else if(upright.id == 1  && right.id == 1)
+		else
 		{
-			setParticleAt(pos.x, pos.y, upright.id);
-			//setParticleAt(pos.x + 1, pos.y + 1, 0);
+			int directionBias = (rand(pos) > 0.5f ? -1 : 1);
+			if(getParticleAt(pos.x + directionBias, pos.y + 1).id > 1 && getParticleAt(pos.x + directionBias, pos.y).id >= 1)
+			{
+				setParticleAt(pos.x, pos.y, getParticleAt(pos.x + directionBias, pos.y + 1).id);
+			}
+			else if(getParticleAt(pos.x + (directionBias * -1), pos.y + 1).id > 1 && getParticleAt(pos.x + (directionBias * -1), pos.y).id >= 1) {
+				setParticleAt(pos.x, pos.y, getParticleAt(pos.x + (directionBias * -1), pos.y + 1).id);
+			}
 		}
+
 	}
 
 	// This particle is going to move this turn, so remove it
@@ -117,24 +110,12 @@ void main() {
 		} 
 	}
 
-	
-	
-	/*else {
-		int directionBias = (rand(pos) > 0.5f ? -1 : 1);
-		if(getParticleAt(pos.x + directionBias, pos.y - 1).id == 0)
-		{
-			setParticleAt(pos.x + directionBias, pos.y - 1, current.id);
-		} else if (getParticleAt(pos.x + (directionBias * -1), pos.y - 1).id == 0)
-		{
-		setParticleAt(pos.x + (directionBias * -1), pos.y - 1, current.id);
-		}
-	}*/
 
-	memoryBarrierBuffer();
+	float colorVariation = rand(pos) * 0.2;
 
 	if(getParticleAt(pos.x, pos.y).id > 0)
 	{
-		color = vec4(1.0f, 1.0f, 0.0f, 1.0f);
+		color = vec4(1.0f - colorVariation, 1.0f - colorVariation, colorVariation * 2, 1.0f);
 	} else {
 		color = vec4(0.0f, 0.0f, 0.0f, 1.0f);
 	}
