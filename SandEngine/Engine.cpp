@@ -45,16 +45,25 @@ int Engine::Initialize(std::string title)
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	glDepthFunc(GL_LEQUAL);
 
-	
+	Time::Initialize();
 
 	InitShaders();
 	renderer = new SpriteRenderer(ShaderManager::GetShaderByName("default")->ID);
 	computeShader = ShaderManager::GetShaderByName("computeTest");
-	computeShaderTexture = new Texture(WindowWidth / 4, WindowHeight / 4);
+	computeShaderTexture = new Texture(WindowWidth / Engine::Downscaling, WindowHeight / Engine::Downscaling);
 	ShaderManager::GetShaderByName("default")->Activate();
 	ShaderManager::GetShaderByName("default")->SetInt("img", 0);
 	computeShaderTexture->Bind();
 
+	c_data.assign((Engine::WindowWidth / Engine::Downscaling) * (Engine::WindowHeight / Engine::Downscaling), {0});
+	m_data.assign((Engine::WindowWidth / Engine::Downscaling) * (Engine::WindowHeight / Engine::Downscaling), {0});
+	computeShader->Activate();
+	computeShader->CreateBuffers();
+	// Send the current scene (readonly) data to the buffer
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, computeShader->currentSceneBuffer);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, c_data.size() * sizeof(Particle), c_data.data(), GL_DYNAMIC_DRAW);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, computeShader->modifiedSceneBuffer);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, m_data.size() * sizeof(Particle), m_data.data(), GL_DYNAMIC_DRAW);
 
 	//testTexture = new Texture("resources/textures/test2.png");
 }
@@ -70,6 +79,8 @@ int Engine::InitShaders()
 	return 1;
 }
 
+float lastFrameTime = 0.0f;
+
 void Engine::Step()
 {
 	if (gl_has_error())
@@ -81,16 +92,37 @@ void Engine::Step()
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 
+	computeShader->SetInt("windowWidth", Engine::WindowWidth / Engine::Downscaling);
+	computeShader->SetInt("windowHeight", Engine::WindowWidth / Engine::Downscaling);
+
+	if (Time::time > lastFrameTime + 0.1f)
+	{
+
+		computeShader->Activate();
+
+
+		// upload c_data to the shader
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, computeShader->currentSceneBuffer);
+		glBufferData(GL_SHADER_STORAGE_BUFFER, c_data.size() * sizeof(Particle), c_data.data(), GL_DYNAMIC_DRAW);
+
+		computeShader->Execute(WindowWidth / Engine::Downscaling, WindowHeight / Engine::Downscaling);
+
+		// read m_data and store it in c_data
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, computeShader->modifiedSceneBuffer);
+		glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, c_data.size() * sizeof(Particle), c_data.data());
+
+		lastFrameTime = Time::time;
+	}
+
+	renderer->DrawSprite(computeShaderTexture, glm::vec2(0), glm::vec2(Engine::Downscaling));
 
 	
-	computeShader->Activate();
-	computeShader->Execute(WindowWidth / 4, WindowHeight / 4);
 
-	renderer->DrawSprite(computeShaderTexture, glm::vec2(0), glm::vec2(4));
+	Time::Update();
 
 
 
-
+	
 
 	//renderer->DrawSprite(testTexture);
 

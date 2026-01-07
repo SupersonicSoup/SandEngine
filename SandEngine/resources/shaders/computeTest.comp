@@ -1,14 +1,96 @@
 #version 430 core
+#define DOWNSAMPLE 4
 
 layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 layout (rgba32f, binding = 0) uniform image2D img;
 
+// TODO: SET WINDOW WIDTH AND HEIGHT
+uniform int windowWidth = 0;
+uniform int windowHeight = 0;
+
+float rand(vec2 co){
+    return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
+}
+
+struct Particle
+{
+	int id;
+};
+
+// The current 'state' of the screen, this should be read-only and NEVER modified
+layout (std430, binding = 1) buffer CurrentState {
+	Particle c_parts[];
+};
+
+// The updated state of the screen, this should ONLY be written to
+layout (std430, binding = 2) buffer ModifiedState {
+	Particle m_parts[];
+};
+
+Particle getParticleAt(int x, int y)
+{
+	if(y >= windowHeight || y < 0 || x < 0 || x >= windowWidth)
+	{
+		Particle solid;
+		solid.id = 1;
+		return solid;
+	}
+	int index = (y * windowWidth) + x;
+	return c_parts[index];
+};
+
+void setParticleAt(int x, int y, int id)
+{
+	if(y >= windowHeight || y < 0 || x < 0 || x >= windowWidth)
+	{
+		return;
+	}
+	int index = (y * windowWidth) + x;
+	Particle p;
+	p.id = id;
+	m_parts[index] = p;
+};
+
 void main() {
-	vec4 value = vec4(0.0, 0.0, 0.0, 1.0);
-	ivec2 texelCoord = ivec2(gl_GlobalInvocationID.xy);
+	vec4 color = vec4(1.0, 0.0, 0.0, 1.0);
+	ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
 
-	value.x = float(texelCoord.x) / (gl_NumWorkGroups.x);
-	value.y = float(texelCoord.y) / (gl_NumWorkGroups.y);
+	int index = (pos.y * windowWidth) + pos.x;
+	Particle current = getParticleAt(pos.x, pos.y);
 
-	imageStore(img, texelCoord, value);
+	if(pos.x == windowWidth / 3 && pos.y == windowHeight / 3)
+	{
+		//m_parts[index].id = 1;
+		setParticleAt(pos.x, pos.y, 1);
+	}
+
+	//m_parts[index] = current;
+	
+
+	if(current.id > 0)
+	{
+		if(getParticleAt(pos.x, pos.y - 1).id == 0)
+		{
+			setParticleAt(pos.x, pos.y - 1, current.id);
+			setParticleAt(pos.x, pos.y, 0);
+		} else {
+			int directionBias = (rand(pos) > 0.5f ? -1 : 1);
+			if(getParticleAt(pos.x + directionBias, pos.y - 1).id == 0)
+			{
+				setParticleAt(pos.x + directionBias, pos.y - 1, current.id);
+			} else if (getParticleAt(pos.x + (directionBias * -1), pos.y - 1).id == 0)
+			{
+			setParticleAt(pos.x + (directionBias * -1), pos.y - 1, current.id);
+			}
+		}
+	}
+
+	if(getParticleAt(pos.x, pos.y).id > 0)
+	{
+		color = vec4(1.0f, 1.0f, 0.0f, 1.0f);
+	} else {
+		color = vec4(0.0f, 0.0f, 0.0f, 1.0f);
+	}
+
+	imageStore(img, pos, color);
 }

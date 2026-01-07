@@ -21,10 +21,14 @@ class Shader
 {
 public:
 	GLuint ID;
+	GLuint currentSceneBuffer;
+	GLuint modifiedSceneBuffer;
 	std::string name;
 	Shader();
 	Shader(const char* vert, const char* frag);
 	Shader(const char* compute);
+	void CreateBuffers();
+	void BindBuffers();
 	void SetMatrix(const char* uniform, glm::mat4 matrix);
 	void SetFloat(const char* uniform, float v);
 	void SetInt(const char* uniform, int i);

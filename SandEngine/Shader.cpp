@@ -86,6 +86,19 @@ Shader::Shader(const char* compute)
 	}
 }
 
+void Shader::CreateBuffers()
+{
+	glGenBuffers(1, &currentSceneBuffer);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, currentSceneBuffer);
+	glGenBuffers(1, &modifiedSceneBuffer);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, modifiedSceneBuffer);
+}
+
+void Shader::BindBuffers()
+{
+
+}
+
 void Shader::Activate()
 {
 	glUseProgram(ID);
@@ -131,7 +144,7 @@ void Shader::Execute(int width, int height)
 {
 	glDispatchCompute((unsigned int)width, (unsigned int)height, 1);
 
-	glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+	glMemoryBarrier(GL_ALL_BARRIER_BITS);
 }
 
 // Checks if the different Shaders have compiled properly

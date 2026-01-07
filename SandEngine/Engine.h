@@ -4,6 +4,8 @@
 #include "GLFW/glfw3.h"
 #include "GLError.h"
 #include "ShaderManager.h"
+#include "particle.h"
+#include "Time.h"
 
 class Engine
 {
@@ -33,6 +35,9 @@ public:
 
 	inline static int WindowWidth = 320;
 	inline static int WindowHeight = 240;
+	inline static int Downscaling = 2;
+	inline static std::vector<Particle> c_data;
+	inline static std::vector<Particle> m_data;
 
 private:
 	inline static GLFWwindow* window;

@@ -28,6 +28,12 @@
     <Filter Include="Header Files\render">
       <UniqueIdentifier>{ac6f0877-fb38-4ecc-b341-3ef7d81c1e5f}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\game">
+      <UniqueIdentifier>{108f0dcb-4046-401f-8ee8-31e3d2da9553}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\game">
+      <UniqueIdentifier>{638a73c5-37c2-4798-b773-5e1549497129}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Main.cpp">
@@ -57,6 +63,9 @@
     <ClCompile Include="stb.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Time.cpp">
+      <Filter>Source Files\engine</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
@@ -84,6 +93,12 @@
     </ClInclude>
     <ClInclude Include="Texture.h">
       <Filter>Header Files\render</Filter>
+    </ClInclude>
+    <ClInclude Include="particle.h">
+      <Filter>Header Files\game</Filter>
+    </ClInclude>
+    <ClInclude Include="Time.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
