@@ -68,9 +68,9 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <None Include="packages.config" />
     <None Include="resources\shaders\default.frag" />
     <None Include="resources\shaders\default.vert" />
+    <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="log.h">

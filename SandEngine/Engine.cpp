@@ -57,6 +57,7 @@ int Engine::Initialize(std::string title)
 
 	c_data.assign((Engine::WindowWidth / Engine::Downscaling) * (Engine::WindowHeight / Engine::Downscaling), {0});
 	m_data.assign((Engine::WindowWidth / Engine::Downscaling) * (Engine::WindowHeight / Engine::Downscaling), {0});
+	claimsData.assign((Engine::WindowWidth / Engine::Downscaling) * (Engine::WindowHeight / Engine::Downscaling), {0});
 	computeShader->Activate();
 	computeShader->CreateBuffers();
 	// Send the current scene (readonly) data to the buffer
@@ -64,6 +65,8 @@ int Engine::Initialize(std::string title)
 	glBufferData(GL_SHADER_STORAGE_BUFFER, c_data.size() * sizeof(Particle), c_data.data(), GL_DYNAMIC_DRAW);
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, computeShader->modifiedSceneBuffer);
 	glBufferData(GL_SHADER_STORAGE_BUFFER, m_data.size() * sizeof(Particle), m_data.data(), GL_DYNAMIC_DRAW);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, computeShader->claimsBuffer);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, c_data.size() * sizeof(uint32_t), claimsData.data(), GL_DYNAMIC_COPY);
 
 	//testTexture = new Texture("resources/textures/test2.png");
 }
@@ -95,7 +98,7 @@ void Engine::Step()
 	computeShader->SetInt("windowWidth", Engine::WindowWidth / Engine::Downscaling);
 	computeShader->SetInt("windowHeight", Engine::WindowWidth / Engine::Downscaling);
 
-	if (Time::time > lastFrameTime + 0.1f)
+	if (Time::time > lastFrameTime + 0.0f)
 	{
 
 		computeShader->Activate();
@@ -104,6 +107,10 @@ void Engine::Step()
 		// upload c_data to the shader
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, computeShader->currentSceneBuffer);
 		glBufferData(GL_SHADER_STORAGE_BUFFER, c_data.size() * sizeof(Particle), c_data.data(), GL_DYNAMIC_DRAW);
+
+		// Reset claims grid
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, computeShader->claimsBuffer);
+		glBufferData(GL_SHADER_STORAGE_BUFFER, claimsData.size() * sizeof(uint32_t), claimsData.data(), GL_DYNAMIC_COPY);
 
 		computeShader->Execute(WindowWidth / Engine::Downscaling, WindowHeight / Engine::Downscaling);
 

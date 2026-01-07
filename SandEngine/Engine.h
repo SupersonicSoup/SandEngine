@@ -38,6 +38,7 @@ public:
 	inline static int Downscaling = 2;
 	inline static std::vector<Particle> c_data;
 	inline static std::vector<Particle> m_data;
+	inline static std::vector<uint32_t> claimsData;
 
 private:
 	inline static GLFWwindow* window;

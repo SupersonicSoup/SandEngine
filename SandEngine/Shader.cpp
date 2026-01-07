@@ -92,11 +92,8 @@ void Shader::CreateBuffers()
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, currentSceneBuffer);
 	glGenBuffers(1, &modifiedSceneBuffer);
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, modifiedSceneBuffer);
-}
-
-void Shader::BindBuffers()
-{
-
+	glGenBuffers(1, &claimsBuffer);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, claimsBuffer);
 }
 
 void Shader::Activate()

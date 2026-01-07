@@ -27,12 +27,17 @@ layout (std430, binding = 2) buffer ModifiedState {
 	Particle m_parts[];
 };
 
+// Claims grid
+layout (std430, binding = 3) buffer Claims {
+	uint claims[];
+};
+
 Particle getParticleAt(int x, int y)
 {
 	if(y >= windowHeight || y < 0 || x < 0 || x >= windowWidth)
 	{
 		Particle solid;
-		solid.id = 1;
+		solid.id = 2;
 		return solid;
 	}
 	int index = (y * windowWidth) + x;
@@ -51,6 +56,17 @@ void setParticleAt(int x, int y, int id)
 	m_parts[index] = p;
 };
 
+bool AtomicCheckUnclaimed(int x, int y)
+{
+	if(y >= windowHeight || y < 0 || x < 0 || x >= windowWidth)
+	{
+		return false;
+	}
+	uint index = (y * windowWidth) + x;
+	uint previous = atomicCompSwap(claims[index], 0, 1);
+	return previous == 0;
+}
+
 void main() {
 	vec4 color = vec4(1.0, 0.0, 0.0, 1.0);
 	ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
@@ -60,30 +76,61 @@ void main() {
 
 	if(pos.x == windowWidth / 3 && pos.y == windowHeight / 3)
 	{
-		//m_parts[index].id = 1;
 		setParticleAt(pos.x, pos.y, 1);
 	}
 
 	//m_parts[index] = current;
-	
+	Particle up = getParticleAt(pos.x, pos.y + 1);
+	Particle upleft = getParticleAt(pos.x - 1, pos.y + 1);
+	Particle upright = getParticleAt(pos.x + 1, pos.y + 1);
 
-	if(current.id > 0)
-	{
-		if(getParticleAt(pos.x, pos.y - 1).id == 0)
+	Particle left = getParticleAt(pos.x - 1, pos.y);
+	Particle right = getParticleAt(pos.x + 1, pos.y);
+
+	Particle down = getParticleAt(pos.x, pos.y - 1);
+	Particle downleft = getParticleAt(pos.x - 1, pos.y - 1);
+	Particle downright = getParticleAt(pos.x + 1, pos.y - 1);
+
+	if(current.id == 0) {
+		if(up.id == 1)
 		{
-			setParticleAt(pos.x, pos.y - 1, current.id);
-			setParticleAt(pos.x, pos.y, 0);
-		} else {
-			int directionBias = (rand(pos) > 0.5f ? -1 : 1);
-			if(getParticleAt(pos.x + directionBias, pos.y - 1).id == 0)
-			{
-				setParticleAt(pos.x + directionBias, pos.y - 1, current.id);
-			} else if (getParticleAt(pos.x + (directionBias * -1), pos.y - 1).id == 0)
-			{
-			setParticleAt(pos.x + (directionBias * -1), pos.y - 1, current.id);
-			}
+			setParticleAt(pos.x, pos.y, up.id);
+			//setParticleAt(pos.x, pos.y + 1, 0);
+		} 
+		else if(upleft.id == 1 && left.id == 1)
+		{
+			setParticleAt(pos.x, pos.y, upleft.id);
+			//setParticleAt(pos.x - 1, pos.y + 1, 0);
+		}
+		else if(upright.id == 1  && right.id == 1)
+		{
+			setParticleAt(pos.x, pos.y, upright.id);
+			//setParticleAt(pos.x + 1, pos.y + 1, 0);
 		}
 	}
+
+	// This particle is going to move this turn, so remove it
+	if(current.id > 0) {
+		if(down.id == 0 || downleft.id == 0 || downright.id == 0)
+		{
+			setParticleAt(pos.x, pos.y, 0);
+		} 
+	}
+
+	
+	
+	/*else {
+		int directionBias = (rand(pos) > 0.5f ? -1 : 1);
+		if(getParticleAt(pos.x + directionBias, pos.y - 1).id == 0)
+		{
+			setParticleAt(pos.x + directionBias, pos.y - 1, current.id);
+		} else if (getParticleAt(pos.x + (directionBias * -1), pos.y - 1).id == 0)
+		{
+		setParticleAt(pos.x + (directionBias * -1), pos.y - 1, current.id);
+		}
+	}*/
+
+	memoryBarrierBuffer();
 
 	if(getParticleAt(pos.x, pos.y).id > 0)
 	{

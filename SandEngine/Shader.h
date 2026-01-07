@@ -23,6 +23,7 @@ public:
 	GLuint ID;
 	GLuint currentSceneBuffer;
 	GLuint modifiedSceneBuffer;
+	GLuint claimsBuffer;
 	std::string name;
 	Shader();
 	Shader(const char* vert, const char* frag);
