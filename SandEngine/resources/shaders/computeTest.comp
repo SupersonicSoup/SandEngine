@@ -1,7 +1,7 @@
 #version 430 core
 #define DOWNSAMPLE 4
 
-layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+layout (local_size_x = 10, local_size_y = 10, local_size_z = 1) in;
 layout (rgba32f, binding = 0) uniform image2D img;
 
 uniform int windowWidth = 0;
@@ -13,6 +13,8 @@ uniform int mouseY = 0;
 uniform int leftClick = 0;
 uniform int rightClick = 0;
 
+uniform int drawingType = 2;
+
 float rand(vec2 co){
     return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
 }
@@ -21,6 +23,7 @@ struct Particle
 {
 	int id;
 };
+
 
 // The current 'state' of the screen, this should be read-only and NEVER modified
 layout (std430, binding = 1) buffer CurrentState {
@@ -36,6 +39,20 @@ layout (std430, binding = 2) buffer ModifiedState {
 layout (std430, binding = 3) buffer Claims {
 	uint claims[];
 };
+
+bool NotYetClaimed(int x, int y)
+{
+	int index = (y * windowWidth) + x;
+	uint previous = atomicCompSwap(claims[index], 0, 1);
+	return previous == 0;
+}
+
+#define AIR 0
+#define SOLID 1
+#define SOIL 2
+#define WATER 3
+#define BUBBLE 4
+
 
 Particle getParticleAt(int x, int y)
 {
@@ -69,21 +86,20 @@ void main() {
 	Particle current = getParticleAt(pos.x, pos.y);
 
 
-	if(leftClick) {
+	if(leftClick == 1) {
 		ivec2 cursorPos = ivec2(mouseX, windowHeight - mouseY);
-		if(length(cursorPos - pos) < 3) {
-			setParticleAt(pos.x, pos.y, 2);
+		if(length(cursorPos - pos) < 4) {
+			setParticleAt(pos.x, pos.y, drawingType);
 		}
 	}
 
-	if(rightClick) {
+	if(rightClick == 1) {
 		ivec2 cursorPos = ivec2(mouseX, windowHeight - mouseY);
-		if(length(cursorPos - pos) < 5) {
+		if(length(cursorPos - pos) < 4) {
 			setParticleAt(pos.x, pos.y, 0);
 		}
 	}
 
-	//m_parts[index] = current;
 	Particle up = getParticleAt(pos.x, pos.y + 1);
 	Particle upleft = getParticleAt(pos.x - 1, pos.y + 1);
 	Particle upright = getParticleAt(pos.x + 1, pos.y + 1);
@@ -95,7 +111,78 @@ void main() {
 	Particle downleft = getParticleAt(pos.x - 1, pos.y - 1);
 	Particle downright = getParticleAt(pos.x + 1, pos.y - 1);
 
-	// If the current cell is empty
+
+	// TODO: Write better functions for swapping two particles, make it easier to swap particles randomly diagonally (like for bubbles)
+	// Need to simplify conditionals
+
+	if(current.id > 0) {
+		// Soil
+		if(current.id == SOIL) {
+			if(down.id == AIR && NotYetClaimed(pos.x, pos.y - 1)) {
+				setParticleAt(pos.x, pos.y - 1, current.id);
+				setParticleAt(pos.x, pos.y, AIR);
+			} else if (down.id == WATER || down.id == BUBBLE && NotYetClaimed(pos.x, pos.y - 1) && NotYetClaimed(pos.x, pos.y)) { // Sink in water
+				setParticleAt(pos.x, pos.y - 1, current.id);
+				// Randomly create bubbles
+				if(rand(pos) > 0.05) {
+					setParticleAt(pos.x, pos.y, WATER);
+				} else {
+					setParticleAt(pos.x, pos.y, BUBBLE);
+				}
+			} else {
+				int directionBias = (rand(pos) > 0.5)?1:-1;
+				// Pick a random direction to go from here
+				if (getParticleAt(pos.x + directionBias, pos.y - 1).id == AIR && NotYetClaimed(pos.x + directionBias, pos.y - 1)) {
+					setParticleAt(pos.x + directionBias, pos.y -1, current.id);
+					setParticleAt(pos.x, pos.y, AIR);
+				} else if (getParticleAt(pos.x + directionBias, pos.y - 1).id == 3 && NotYetClaimed(pos.x + directionBias, pos.y - 1) && NotYetClaimed(pos.x, pos.y)) {
+					setParticleAt(pos.x + directionBias, pos.y -1, current.id);
+					setParticleAt(pos.x, pos.y, WATER);
+				} 
+				/*else if (getParticleAt(pos.x - directionBias, pos.y - 1).id == 0 && NotYetClaimed(pos.x - directionBias, pos.y - 1)) {
+					setParticleAt(pos.x - directionBias, pos.y -1, current.id);
+					setParticleAt(pos.x, pos.y, 0);
+				}*/
+			}
+			
+		}
+		// Water
+		if(current.id == WATER) {
+			if(down.id == 0 && NotYetClaimed(pos.x, pos.y - 1)) {
+				setParticleAt(pos.x, pos.y - 1, current.id);
+				setParticleAt(pos.x, pos.y, AIR);
+			} else if (downleft.id == 0 && NotYetClaimed(pos.x - 1, pos.y - 1)) {
+				setParticleAt(pos.x - 1, pos.y - 1, current.id);
+				setParticleAt(pos.x, pos.y, AIR);
+			} else if (downright.id == 0 && NotYetClaimed(pos.x + 1, pos.y - 1)) {
+				setParticleAt(pos.x + 1, pos.y - 1, current.id);
+				setParticleAt(pos.x, pos.y, AIR);
+			} else if (left.id != 0 && right.id == 0 && NotYetClaimed(pos.x + 1, pos.y)) { 
+				setParticleAt(pos.x + 1, pos.y, current.id);
+				setParticleAt(pos.x, pos.y, AIR);
+			} else if (right.id != 0 && left.id == 0 && NotYetClaimed(pos.x - 1, pos.y)) {
+				setParticleAt(pos.x - 1, pos.y, current.id);
+				setParticleAt(pos.x, pos.y, AIR);
+			}
+		}
+
+		if(current.id == BUBBLE)
+		{
+			if(up.id == WATER && NotYetClaimed(pos.x, pos.y + 1) && NotYetClaimed(pos.x, pos.y))
+			{
+				setParticleAt(pos.x, pos.y + 1, BUBBLE);
+				setParticleAt(pos.x, pos.y, WATER);
+			} else if (up.id == AIR && NotYetClaimed(pos.x, pos.y + 1)) {
+				setParticleAt(pos.x, pos.y, WATER);
+			}
+		}
+	}
+
+
+
+	// PULL METHOD
+
+	/*// If the current cell is empty
 	if(current.id == 0) {
 		// But the one above it isn't
 		if(up.id > 1)
@@ -122,17 +209,39 @@ void main() {
 		{
 			setParticleAt(pos.x, pos.y, 0);
 		} 
-	}
+	}*/
 
+	float colorVariation = rand(pos) * 0.05;
 
-	float colorVariation = rand(pos) * 0.2;
-
-	if(getParticleAt(pos.x, pos.y).id > 0)
+	if(current.id == SOLID)
 	{
-		color = vec4(1.0f - colorVariation, 1.0f - colorVariation, colorVariation * 2, 1.0f);
-	} else {
-		color = vec4(0.0f, 0.0f, 0.0f, 1.0f);
+		color = vec4(0.2 + colorVariation, 0.2 + colorVariation, 0.2 + colorVariation, 1.0f);
 	}
+	else if(current.id == SOIL)
+	{
+		if(getParticleAt(pos.x, pos.y + 1).id != current.id)
+		{
+			color = vec4(colorVariation, 1.0f - colorVariation, colorVariation, 1.0f);
+		} else {
+			color = vec4(0.5f - colorVariation, 0.4 - colorVariation, 0.3 - colorVariation, 1.0f);
+		}
+	}
+	else if (current.id == WATER)
+	{
+		if(getParticleAt(pos.x, pos.y + 1).id != current.id)
+		{
+			color = vec4(0.8 - colorVariation, 0.8 - colorVariation, 1.0 - colorVariation, 1.0f);
+		} else {
+			color = vec4(0.2 + colorVariation, 0.2 + colorVariation, 0.6 + colorVariation, 1.0f);
+		}
+	} 
+	else if(current.id == BUBBLE)
+	{
+		color = vec4(1.0, 1.0, 1.0, 1.0f);
+	}
+	else {
+		color = vec4(0.05, 0.05, 0.2, 1.0);
+	} 
 
 	imageStore(img, pos, color);
 }

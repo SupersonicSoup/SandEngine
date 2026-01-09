@@ -83,6 +83,7 @@ int Engine::InitShaders()
 }
 
 float lastFrameTime = 0.0f;
+int drawingType = 1;
 
 void Engine::Step()
 {
@@ -115,7 +116,6 @@ void Engine::Step()
 
 		computeShader->SetInt("mouseX", mousex);
 		computeShader->SetInt("mouseY", mousey);
-		log::println(std::to_string(mousex) + ", " + std::to_string(mousey));
 
 
 		// upload c_data to the shader
@@ -133,6 +133,22 @@ void Engine::Step()
 		glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, c_data.size() * sizeof(Particle), c_data.data());
 
 		lastFrameTime = Time::time;
+
+
+		if (glfwGetKey(window, GLFW_KEY_1) == GLFW_PRESS)
+		{
+			drawingType = 1;
+			log::println("Drawing with solid");
+		}
+		else if (glfwGetKey(window, GLFW_KEY_2) == GLFW_PRESS) {
+			drawingType = 2;
+			log::println("Drawing with soil");
+		}
+		else if (glfwGetKey(window, GLFW_KEY_3) == GLFW_PRESS) {
+			drawingType = 3;
+			log::println("Drawing with water");
+		}
+		computeShader->SetInt("drawingType", drawingType);
 	}
 
 	renderer->DrawSprite(computeShaderTexture, glm::vec2(0), glm::vec2(Engine::Downscaling));

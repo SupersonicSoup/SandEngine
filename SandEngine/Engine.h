@@ -35,7 +35,7 @@ public:
 
 	inline static int WindowWidth = 800;
 	inline static int WindowHeight = 600;
-	inline static int Downscaling = 8;
+	inline static int Downscaling = 4;
 	inline static std::vector<Particle> c_data;
 	inline static std::vector<Particle> m_data;
 	inline static std::vector<uint32_t> claimsData;
