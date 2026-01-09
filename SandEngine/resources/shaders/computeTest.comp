@@ -15,6 +15,8 @@ uniform int rightClick = 0;
 
 uniform int drawingType = 2;
 
+uniform float time = 0.0f;
+
 float rand(vec2 co){
     return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
 }
@@ -40,76 +42,166 @@ layout (std430, binding = 3) buffer Claims {
 	uint claims[];
 };
 
-bool NotYetClaimed(int x, int y)
-{
-	int index = (y * windowWidth) + x;
-	uint previous = atomicCompSwap(claims[index], 0, 1);
-	return previous == 0;
-}
-
 #define AIR 0
 #define SOLID 1
 #define SOIL 2
 #define WATER 3
 #define BUBBLE 4
+#define FIRE 5
 
 
-Particle getParticleAt(int x, int y)
+Particle getAt(int x, int y)
 {
-	if(y >= windowHeight || y < 0 || x < 0 || x >= windowWidth)
+	if(y < 0 || x < 0 || x >= windowWidth)
 	{
 		Particle solid;
 		solid.id = 1;
 		return solid;
 	}
+	if(y >= windowHeight)
+	{
+		Particle none;
+		none.id = 0;
+		return none;
+	}
 	int index = (y * windowWidth) + x;
 	return c_parts[index];
 };
 
-void setParticleAt(int x, int y, int id)
+Particle getAt(ivec2 pos)
+{
+	return getAt(pos.x, pos.y);
+}
+
+// Returns true if claim was successful
+bool Claim(int index)
+{
+	uint previous = atomicCompSwap(claims[index], 0, 1);
+	return previous == 0;
+}
+
+bool Claim(ivec2 pos)
+{
+	int index = (pos.y * windowWidth) + pos.x;
+	return Claim(index);
+}
+
+
+
+// If particles at positions A and B are unclaimed, return true
+/*bool CanSwapParticles(ivec2 a, ivec2 b)
+{
+	int index_a = (a.y * windowWidth) + a.x;
+	int index_b = (b.y * windowWidth) + b.x;
+	return !isClaimed(a) && !isClaimed(b);
+}*/
+
+void setAt(int x, int y, int id)
 {
 	if(y >= windowHeight || y < 0 || x < 0 || x >= windowWidth)
 	{
 		return;
 	}
 	int index = (y * windowWidth) + x;
-	Particle p;
-	p.id = id;
-	m_parts[index] = p;
+	//if(TryClaim(index))
+	//{
+		Particle p;
+		p.id = id;
+		m_parts[index] = p;
+	//}
 };
 
+void setAt(ivec2 pos, int id)
+{
+	setAt(pos.x, pos.y, id);
+}
+
+#define UP ivec2(0, 1)
+#define UPLEFT ivec2(-1, 1)
+#define UPRIGHT ivec2(1, 1)
+#define LEFT ivec2(-1, 0)
+#define RIGHT ivec2(1, 0)
+#define DOWN ivec2(0, -1)
+#define DOWNLEFT ivec2(-1, -1)
+#define DOWNRIGHT ivec2(1, -1)
+
+
+vec3 GetColorAt(int x, int y)
+{
+	float colorVariation = rand(ivec2(x, y)) * 0.05;
+	vec3 color;
+	Particle current = getAt(x, y);
+
+	if(current.id == SOLID)
+	{
+		color = vec3(0.2 + colorVariation, 0.2 + colorVariation, 0.2 + colorVariation);
+	}
+	else if(current.id == SOIL)
+	{
+		if(getAt(x, y + 1).id != current.id)
+		{
+			color = vec3(colorVariation, 1.0f - colorVariation, colorVariation);
+		} else {
+			color = vec3(0.5f - colorVariation, 0.4 - colorVariation, 0.3 - colorVariation);
+		}
+	}
+	else if (current.id == WATER)
+	{
+		if(getAt(x, y + 1).id != current.id)
+		{
+			color = vec3(0.8 - colorVariation, 0.8 - colorVariation, 1.0 - colorVariation);
+		} else {
+			color = vec3(0.2 + colorVariation, 0.2 + colorVariation, 0.6 + colorVariation);
+		}
+	} 
+	else if(current.id == BUBBLE)
+	{
+		color = vec3(1.0, 1.0, 1.0);
+	}
+	else if(current.id == FIRE)
+	{
+		vec3 red = vec3(0.7 + colorVariation, 0.2 + colorVariation, 0.2 + colorVariation);
+		vec3 yellow = vec3(0.9 + colorVariation, 0.9 + colorVariation, 0.2 + colorVariation);
+		vec3 fireColor = mix(red, yellow, rand(ivec2(x, y) * time));
+		color = fireColor;
+	}
+	else {
+		color = vec3(0.05, 0.05, 0.2);
+	} 
+	return color;
+}
+
 void main() {
-	vec4 color = vec4(1.0, 0.0, 0.0, 1.0);
 	ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
 
-	int index = (pos.y * windowWidth) + pos.x;
-	Particle current = getParticleAt(pos.x, pos.y);
+	Particle current = getAt(pos.x, pos.y);
 
 
 	if(leftClick == 1) {
 		ivec2 cursorPos = ivec2(mouseX, windowHeight - mouseY);
 		if(length(cursorPos - pos) < 4) {
-			setParticleAt(pos.x, pos.y, drawingType);
+			setAt(pos.x, pos.y, drawingType);
 		}
 	}
 
 	if(rightClick == 1) {
 		ivec2 cursorPos = ivec2(mouseX, windowHeight - mouseY);
 		if(length(cursorPos - pos) < 4) {
-			setParticleAt(pos.x, pos.y, 0);
+			setAt(pos.x, pos.y, 0);
 		}
 	}
 
-	Particle up = getParticleAt(pos.x, pos.y + 1);
-	Particle upleft = getParticleAt(pos.x - 1, pos.y + 1);
-	Particle upright = getParticleAt(pos.x + 1, pos.y + 1);
+	// Get neighbors
+	Particle nUp = getAt(pos + UP);
+	Particle nUpLeft = getAt(pos + UPLEFT);
+	Particle nUpRight = getAt(pos + UPRIGHT);
 
-	Particle left = getParticleAt(pos.x - 1, pos.y);
-	Particle right = getParticleAt(pos.x + 1, pos.y);
-
-	Particle down = getParticleAt(pos.x, pos.y - 1);
-	Particle downleft = getParticleAt(pos.x - 1, pos.y - 1);
-	Particle downright = getParticleAt(pos.x + 1, pos.y - 1);
+	Particle nLeft = getAt(pos + LEFT);
+	Particle nRight = getAt(pos + RIGHT);
+	
+	Particle nDown = getAt(pos + DOWN);
+	Particle nDownLeft = getAt(pos + DOWNLEFT);
+	Particle nDownRight = getAt(pos + DOWNRIGHT);
 
 
 	// TODO: Write better functions for swapping two particles, make it easier to swap particles randomly diagonally (like for bubbles)
@@ -118,130 +210,167 @@ void main() {
 	if(current.id > 0) {
 		// Soil
 		if(current.id == SOIL) {
-			if(down.id == AIR && NotYetClaimed(pos.x, pos.y - 1)) {
-				setParticleAt(pos.x, pos.y - 1, current.id);
-				setParticleAt(pos.x, pos.y, AIR);
-			} else if (down.id == WATER || down.id == BUBBLE && NotYetClaimed(pos.x, pos.y - 1) && NotYetClaimed(pos.x, pos.y)) { // Sink in water
-				setParticleAt(pos.x, pos.y - 1, current.id);
+			if(nDown.id == AIR && Claim(pos + DOWN)) {
+				setAt(pos + DOWN, current.id);
+				setAt(pos, AIR);
+			} else if (nDown.id == WATER || nDown.id == BUBBLE && Claim(pos + DOWN)) { // Sink in water
+				setAt(pos + DOWN, current.id);
 				// Randomly create bubbles
-				if(rand(pos) > 0.05) {
-					setParticleAt(pos.x, pos.y, WATER);
+				if(rand(pos) > 0.01) {
+					setAt(pos, WATER);
 				} else {
-					setParticleAt(pos.x, pos.y, BUBBLE);
+					setAt(pos, BUBBLE);
 				}
 			} else {
 				int directionBias = (rand(pos) > 0.5)?1:-1;
 				// Pick a random direction to go from here
-				if (getParticleAt(pos.x + directionBias, pos.y - 1).id == AIR && NotYetClaimed(pos.x + directionBias, pos.y - 1)) {
-					setParticleAt(pos.x + directionBias, pos.y -1, current.id);
-					setParticleAt(pos.x, pos.y, AIR);
-				} else if (getParticleAt(pos.x + directionBias, pos.y - 1).id == 3 && NotYetClaimed(pos.x + directionBias, pos.y - 1) && NotYetClaimed(pos.x, pos.y)) {
-					setParticleAt(pos.x + directionBias, pos.y -1, current.id);
-					setParticleAt(pos.x, pos.y, WATER);
+				if (getAt(pos.x + directionBias, pos.y - 1).id == AIR && Claim(ivec2(pos.x + directionBias, pos.y - 1))) {
+					setAt(pos.x + directionBias, pos.y - 1, current.id);
+					setAt(pos.x, pos.y, AIR);
+				} else if (getAt(pos.x + directionBias, pos.y - 1).id == WATER && Claim(ivec2(pos.x + directionBias, pos.y - 1))) {
+					setAt(pos.x + directionBias, pos.y -1, current.id);
+					setAt(pos, WATER);
 				} 
-				/*else if (getParticleAt(pos.x - directionBias, pos.y - 1).id == 0 && NotYetClaimed(pos.x - directionBias, pos.y - 1)) {
-					setParticleAt(pos.x - directionBias, pos.y -1, current.id);
-					setParticleAt(pos.x, pos.y, 0);
+				/*else if (getAt(pos.x - directionBias, pos.y - 1).id == 0 && Claim(ivec2(pos.x - directionBias, pos.y - 1))) {
+					setAt(pos.x - directionBias, pos.y -1, current.id);
+					setAt(pos.x, pos.y, 0);
 				}*/
 			}
 			
 		}
+
 		// Water
 		if(current.id == WATER) {
-			if(down.id == 0 && NotYetClaimed(pos.x, pos.y - 1)) {
-				setParticleAt(pos.x, pos.y - 1, current.id);
-				setParticleAt(pos.x, pos.y, AIR);
-			} else if (downleft.id == 0 && NotYetClaimed(pos.x - 1, pos.y - 1)) {
-				setParticleAt(pos.x - 1, pos.y - 1, current.id);
-				setParticleAt(pos.x, pos.y, AIR);
-			} else if (downright.id == 0 && NotYetClaimed(pos.x + 1, pos.y - 1)) {
-				setParticleAt(pos.x + 1, pos.y - 1, current.id);
-				setParticleAt(pos.x, pos.y, AIR);
-			} else if (left.id != 0 && right.id == 0 && NotYetClaimed(pos.x + 1, pos.y)) { 
-				setParticleAt(pos.x + 1, pos.y, current.id);
-				setParticleAt(pos.x, pos.y, AIR);
-			} else if (right.id != 0 && left.id == 0 && NotYetClaimed(pos.x - 1, pos.y)) {
-				setParticleAt(pos.x - 1, pos.y, current.id);
-				setParticleAt(pos.x, pos.y, AIR);
+			// If DOWN is free, move DOWN
+			if(nDown.id == AIR && Claim(pos + DOWN)) {
+				setAt(pos + DOWN, current.id);
+				setAt(pos, AIR);
+			} else {
+				// If ALL 3 below are solid, move left or right
+				if(nDownLeft.id != AIR && nDown.id != AIR && nDownRight.id != AIR)
+				{
+					// If the pixel to one side is solid but other side is free, move that way
+					int directionBias = (rand(pos * time) > 0.5)?1:-1;
+					if (getAt(pos.x + directionBias, pos.y).id != AIR && getAt(pos.x - directionBias, pos.y).id == AIR && Claim(ivec2(pos.x - directionBias, pos.y)))
+					{
+						setAt(pos.x - directionBias, pos.y, current.id);
+						setAt(pos, AIR);
+					}
+					// If stranded, bias towards directions featuring water
+					if (nLeft.id == AIR && (getAt(pos + LEFT + LEFT).id == WATER) && Claim(pos + LEFT))
+					{
+						setAt(pos + LEFT, current.id);
+						setAt(pos, AIR);
+					} else if (nRight.id == AIR && (getAt(pos + RIGHT + RIGHT).id == WATER) && Claim(pos + RIGHT))
+					{
+						setAt(pos + RIGHT, current.id);
+						setAt(pos, AIR);
+					} else {
+						int directionBias2 = (rand(pos * time) > 0.5)?1:-1;
+						if (getAt(pos.x + directionBias, pos.y).id == AIR && Claim(ivec2(pos.x + directionBias, pos.y)))
+						{
+							setAt(pos.x + directionBias, pos.y, current.id);
+							setAt(pos, AIR);
+						}
+					}
+
+				// Otherwise, pick a random downward diagonal to go and try and go there
+				} else {
+					int directionBias = (rand(pos * time) > 0.5)?1:-1;
+					if (getAt(pos.x + directionBias, pos.y - 1).id == AIR && Claim(ivec2(pos.x + directionBias, pos.y - 1))) {
+						setAt(pos.x + directionBias, pos.y - 1, current.id);
+						setAt(pos.x, pos.y, AIR);
+					}
+				}
 			}
 		}
 
 		if(current.id == BUBBLE)
 		{
-			if(up.id == WATER && NotYetClaimed(pos.x, pos.y + 1) && NotYetClaimed(pos.x, pos.y))
+			int jitter = (rand(pos * time) > 0.5)?1:-1;
+			if(nUp.id == WATER && Claim(pos + ivec2(jitter, jitter) + UP))
 			{
-				setParticleAt(pos.x, pos.y + 1, BUBBLE);
-				setParticleAt(pos.x, pos.y, WATER);
-			} else if (up.id == AIR && NotYetClaimed(pos.x, pos.y + 1)) {
-				setParticleAt(pos.x, pos.y, WATER);
+				setAt(pos + ivec2(jitter, jitter) + UP, BUBBLE);
+				setAt(pos, WATER);
+			} else if (nUp.id == AIR) {
+				setAt(pos.x, pos.y, WATER);
 			}
 		}
-	}
 
-
-
-	// PULL METHOD
-
-	/*// If the current cell is empty
-	if(current.id == 0) {
-		// But the one above it isn't
-		if(up.id > 1)
+		if (current.id == FIRE)
 		{
-			setParticleAt(pos.x, pos.y, up.id);
-		}
-		else
-		{
-			int directionBias = (rand(pos) > 0.5f ? -1 : 1);
-			if(getParticleAt(pos.x + directionBias, pos.y + 1).id > 1 && getParticleAt(pos.x + directionBias, pos.y).id >= 1)
+			int jitter = (rand(pos * time) > 0.5)?1:-1;
+			bool die = (rand(pos * time) > 0.8);
+			bool spread = (rand(pos * time) > 0.8);
+
+			if(nLeft.id != AIR && spread)
 			{
-				setParticleAt(pos.x, pos.y, getParticleAt(pos.x + directionBias, pos.y + 1).id);
+				if (Claim(pos + LEFT)) {
+					setAt(pos + LEFT, FIRE);
+				}
 			}
-			else if(getParticleAt(pos.x + (directionBias * -1), pos.y + 1).id > 1 && getParticleAt(pos.x + (directionBias * -1), pos.y).id >= 1) {
-				setParticleAt(pos.x, pos.y, getParticleAt(pos.x + (directionBias * -1), pos.y + 1).id);
+
+			if(nRight.id != AIR && spread)
+			{
+				if (Claim(pos + RIGHT)) {
+					setAt(pos + RIGHT, FIRE);
+				}
+			}
+
+			if(nUpLeft.id != AIR && spread)
+			{
+				if (Claim(pos + UPLEFT)) {
+					setAt(pos + UPLEFT, FIRE);
+				}
+			}
+
+			if(nUp.id != AIR && spread)
+			{
+				if (Claim(pos + UP)) {
+					if(getAt(pos + UP).id == FIRE)
+					{
+						setAt(pos, AIR);
+					}
+					setAt(pos + UP, FIRE);
+				}
+			}
+
+			if(nUpRight.id != AIR && spread)
+			{
+				if (Claim(pos + UPRIGHT)) {
+					setAt(pos + UPRIGHT, FIRE);
+				}
+			}
+
+			if(nDown.id != AIR && spread)
+			{
+				if (Claim(pos + DOWN)) {
+					setAt(pos + DOWN, FIRE);
+				}
+			}
+
+			if(nUp.id == AIR && Claim(pos + ivec2(jitter, jitter) + UP)) {
+				if(rand(pos * time) > 0.7) {
+				if(die)
+				{
+					setAt(pos, AIR);
+				} else {
+					setAt(pos + ivec2(jitter, jitter) + UP, FIRE);
+					setAt(pos, AIR);
+				}
+				}
 			}
 		}
-
 	}
 
-	// This particle is going to move this turn, so remove it
-	if(current.id > 0) {
-		if(down.id == 0 || downleft.id == 0 || downright.id == 0)
-		{
-			setParticleAt(pos.x, pos.y, 0);
-		} 
-	}*/
+	vec3 leftColor = GetColorAt(pos.x - 1, pos.y);
+	vec3 rightColor = GetColorAt(pos.x + 1, pos.y);
+	vec3 upColor = GetColorAt(pos.x, pos.y + 1);
+	vec3 downColor = GetColorAt(pos.x, pos.y - 1);
+	vec3 thisColor = GetColorAt(pos.x, pos.y);
+	vec3 avgColor = (leftColor + rightColor + upColor + downColor + thisColor) / 5;
 
-	float colorVariation = rand(pos) * 0.05;
-
-	if(current.id == SOLID)
-	{
-		color = vec4(0.2 + colorVariation, 0.2 + colorVariation, 0.2 + colorVariation, 1.0f);
-	}
-	else if(current.id == SOIL)
-	{
-		if(getParticleAt(pos.x, pos.y + 1).id != current.id)
-		{
-			color = vec4(colorVariation, 1.0f - colorVariation, colorVariation, 1.0f);
-		} else {
-			color = vec4(0.5f - colorVariation, 0.4 - colorVariation, 0.3 - colorVariation, 1.0f);
-		}
-	}
-	else if (current.id == WATER)
-	{
-		if(getParticleAt(pos.x, pos.y + 1).id != current.id)
-		{
-			color = vec4(0.8 - colorVariation, 0.8 - colorVariation, 1.0 - colorVariation, 1.0f);
-		} else {
-			color = vec4(0.2 + colorVariation, 0.2 + colorVariation, 0.6 + colorVariation, 1.0f);
-		}
-	} 
-	else if(current.id == BUBBLE)
-	{
-		color = vec4(1.0, 1.0, 1.0, 1.0f);
-	}
-	else {
-		color = vec4(0.05, 0.05, 0.2, 1.0);
-	} 
+	vec4 color = vec4(thisColor, 1.0);
 
 	imageStore(img, pos, color);
 }

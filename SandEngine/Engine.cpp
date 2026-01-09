@@ -100,6 +100,8 @@ void Engine::Step()
 	{
 		computeShader->Activate();
 
+		computeShader->SetFloat("time", Time::time);
+
 		computeShader->SetInt("windowWidth", Engine::WindowWidth / Engine::Downscaling);
 		computeShader->SetInt("windowHeight", Engine::WindowHeight / Engine::Downscaling);
 
@@ -147,6 +149,14 @@ void Engine::Step()
 		else if (glfwGetKey(window, GLFW_KEY_3) == GLFW_PRESS) {
 			drawingType = 3;
 			log::println("Drawing with water");
+		}
+		else if (glfwGetKey(window, GLFW_KEY_4) == GLFW_PRESS) {
+			drawingType = 4;
+			log::println("Drawing with bubbles");
+		}
+		else if (glfwGetKey(window, GLFW_KEY_5) == GLFW_PRESS) {
+			drawingType = 5;
+			log::println("Drawing with fire");
 		}
 		computeShader->SetInt("drawingType", drawingType);
 	}
