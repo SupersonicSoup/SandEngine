@@ -1,6 +1,4 @@
 #version 430 core
-#define DOWNSAMPLE 4
-
 layout (local_size_x = 10, local_size_y = 10, local_size_z = 1) in;
 layout (rgba32f, binding = 0) uniform image2D img;
 
@@ -17,15 +15,49 @@ uniform int drawingType = 2;
 
 uniform float time = 0.0f;
 
+uniform int altFrame = 0;
+
 float rand(vec2 co){
     return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
 }
 
-struct Particle
+// Particle types
+#define AIR 0
+#define STONE 1
+#define SOIL 2
+#define WATER 3
+#define BUBBLE 4
+#define FIRE 5
+#define STEAM 6
+
+// Particle categories
+#define CAT_STATIC 0
+#define CAT_POWDER 1
+#define CAT_LIQUID 2
+#define CAT_GAS 3
+
+struct Material
 {
-	int id;
+	int type;
+	int category;
+	bool flammable;
 };
 
+Material materials[] = Material[](
+	// Air
+	Material(AIR, CAT_STATIC, false),
+	Material(STONE, CAT_STATIC, false),
+	Material(SOIL, CAT_POWDER, true),
+	Material(WATER, CAT_LIQUID, false),
+	Material(BUBBLE, CAT_STATIC, false),
+	Material(FIRE, CAT_GAS, true),
+	Material(STEAM, CAT_GAS, false)
+);
+
+struct Particle
+{
+	int matID;
+};
 
 // The current 'state' of the screen, this should be read-only and NEVER modified
 layout (std430, binding = 1) buffer CurrentState {
@@ -42,26 +74,18 @@ layout (std430, binding = 3) buffer Claims {
 	uint claims[];
 };
 
-#define AIR 0
-#define SOLID 1
-#define SOIL 2
-#define WATER 3
-#define BUBBLE 4
-#define FIRE 5
-
-
 Particle getAt(int x, int y)
 {
 	if(y < 0 || x < 0 || x >= windowWidth)
 	{
 		Particle solid;
-		solid.id = 1;
+		solid.matID = STONE;
 		return solid;
 	}
 	if(y >= windowHeight)
 	{
 		Particle none;
-		none.id = 0;
+		none.matID = 0;
 		return none;
 	}
 	int index = (y * windowWidth) + x;
@@ -86,16 +110,6 @@ bool Claim(ivec2 pos)
 	return Claim(index);
 }
 
-
-
-// If particles at positions A and B are unclaimed, return true
-/*bool CanSwapParticles(ivec2 a, ivec2 b)
-{
-	int index_a = (a.y * windowWidth) + a.x;
-	int index_b = (b.y * windowWidth) + b.x;
-	return !isClaimed(a) && !isClaimed(b);
-}*/
-
 void setAt(int x, int y, int id)
 {
 	if(y >= windowHeight || y < 0 || x < 0 || x >= windowWidth)
@@ -103,12 +117,9 @@ void setAt(int x, int y, int id)
 		return;
 	}
 	int index = (y * windowWidth) + x;
-	//if(TryClaim(index))
-	//{
-		Particle p;
-		p.id = id;
-		m_parts[index] = p;
-	//}
+	Particle p;
+	p.matID = id;
+	m_parts[index] = p;
 };
 
 void setAt(ivec2 pos, int id)
@@ -125,45 +136,138 @@ void setAt(ivec2 pos, int id)
 #define DOWNLEFT ivec2(-1, -1)
 #define DOWNRIGHT ivec2(1, -1)
 
+Particle nUp;
+Particle nUpLeft;
+Particle nUpRight;
+
+Particle nLeft;
+Particle nRight;
+	
+Particle nDown;
+Particle nDownLeft;
+Particle nDownRight;
+
+Particle current;
+
+ivec2 pos;
+
+void GetNeighbors(ivec2 pos)
+{
+	nUp = getAt(pos + UP);
+	nUpLeft = getAt(pos + UPLEFT);
+	nUpRight = getAt(pos + UPRIGHT);
+	
+	nLeft = getAt(pos + LEFT);
+	nRight = getAt(pos + RIGHT);
+	
+	nDown = getAt(pos + DOWN);
+	nDownLeft = getAt(pos + DOWNLEFT);
+	nDownRight = getAt(pos + DOWNRIGHT);
+}
+
+void MoveTo(int x, int y)
+{
+	setAt(ivec2(x, y), current.matID);
+	setAt(pos, AIR);
+}
+
+void MoveTo(ivec2 v)
+{
+	MoveTo(v.x, v.y);
+}
+
+void MoveToAndReplaceCurrentWith(int x, int y, int matID)
+{
+	if(Claim(pos)) {
+		setAt(ivec2(x, y), current.matID);
+		setAt(pos, matID);
+	}
+}
+
+void MoveToAndReplaceCurrentWith(ivec2 v, int matID)
+{
+	MoveToAndReplaceCurrentWith(v.x, v.y, matID);
+}
+
+
+bool IsEmpty(Particle p)
+{
+	return p.matID == AIR;
+}
+
+// Change this to "TickPowder" for more general movement?
+void TickPowder ()
+{
+	if(IsEmpty(nDown) && Claim(pos + DOWN)) {
+		MoveTo(pos + DOWN);
+	} 
+	else if ((materials[nDown.matID].category == CAT_LIQUID || nDown.matID == BUBBLE) && Claim(pos + DOWN))
+	{ 
+		// Sink in fluids
+		MoveToAndReplaceCurrentWith(pos + DOWN, rand(pos) > 0.01?nDown.matID:BUBBLE);
+	} 
+	else
+	{
+		// Move diagonally down slopes
+		int directionBias = (rand(pos) > 0.5)?1:-1;
+		ivec2 targetPos = ivec2(pos.x + directionBias, pos.y - 1);
+		if ((getAt(targetPos).matID == AIR || materials[getAt(targetPos).matID].category == CAT_LIQUID) && Claim(targetPos))
+		{
+			MoveToAndReplaceCurrentWith(targetPos, getAt(targetPos).matID);
+		} 
+		else if (materials[getAt(targetPos).matID].category == CAT_LIQUID && Claim(targetPos))
+		{
+			MoveToAndReplaceCurrentWith(targetPos, getAt(targetPos).matID);
+		} 
+		// Try going other way if random choice doesn't work
+		/*else if (getAt(pos.x - directionBias, pos.y - 1).matID == 0 && Claim(ivec2(pos.x - directionBias, pos.y - 1))) {
+			setAt(pos.x - directionBias, pos.y -1, current.matID);
+			setAt(pos.x, pos.y, 0);
+		}*/
+	}
+}
+
 
 vec3 GetColorAt(int x, int y)
 {
 	float colorVariation = rand(ivec2(x, y)) * 0.05;
 	vec3 color;
-	Particle current = getAt(x, y);
 
-	if(current.id == SOLID)
+	if(current.matID == STONE)
 	{
 		color = vec3(0.2 + colorVariation, 0.2 + colorVariation, 0.2 + colorVariation);
 	}
-	else if(current.id == SOIL)
+	else if(current.matID == SOIL)
 	{
-		if(getAt(x, y + 1).id != current.id)
+		if(getAt(x, y + 1).matID != current.matID)
 		{
 			color = vec3(colorVariation, 1.0f - colorVariation, colorVariation);
 		} else {
 			color = vec3(0.5f - colorVariation, 0.4 - colorVariation, 0.3 - colorVariation);
 		}
 	}
-	else if (current.id == WATER)
+	else if (current.matID == WATER)
 	{
-		if(getAt(x, y + 1).id != current.id)
+		if(getAt(x, y + 1).matID != WATER && getAt(x, y + 1).matID != BUBBLE)
 		{
 			color = vec3(0.8 - colorVariation, 0.8 - colorVariation, 1.0 - colorVariation);
 		} else {
 			color = vec3(0.2 + colorVariation, 0.2 + colorVariation, 0.6 + colorVariation);
 		}
 	} 
-	else if(current.id == BUBBLE)
+	else if(current.matID == BUBBLE)
 	{
 		color = vec3(1.0, 1.0, 1.0);
 	}
-	else if(current.id == FIRE)
+	else if(current.matID == FIRE)
 	{
 		vec3 red = vec3(0.7 + colorVariation, 0.2 + colorVariation, 0.2 + colorVariation);
 		vec3 yellow = vec3(0.9 + colorVariation, 0.9 + colorVariation, 0.2 + colorVariation);
 		vec3 fireColor = mix(red, yellow, rand(ivec2(x, y) * time));
 		color = fireColor;
+	}
+	else if (current.matID == STEAM) {
+		color = vec3(1.0, 1.0, 1.0);
 	}
 	else {
 		color = vec3(0.05, 0.05, 0.2);
@@ -171,10 +275,65 @@ vec3 GetColorAt(int x, int y)
 	return color;
 }
 
-void main() {
-	ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
+void TickFluid()
+{
+	if(nDown.matID == AIR && Claim(pos + DOWN)) {
+		MoveTo(pos + DOWN);
+	} else {
+		// If ALL 3 below are solid, move left or right
+		if(nDownLeft.matID != AIR && nDown.matID != AIR && nDownRight.matID != AIR)
+		{
+			// If the pixel to one side is solid but other side is free, move that way
+			int directionBias = (rand(pos * time) > 0.5)?1:-1;
+			if (getAt(pos.x + directionBias, pos.y).matID != AIR && getAt(pos.x - directionBias, pos.y).matID == AIR && Claim(ivec2(pos.x - directionBias, pos.y)))
+			{
+				MoveTo(pos.x - directionBias, pos.y);
+			}
+			// If stranded, bias towards directions featuring water
+			if (nLeft.matID == AIR && (getAt(pos + LEFT + LEFT).matID == WATER) && Claim(pos + LEFT))
+			{
+				MoveTo(pos + LEFT);
+			} else if (nRight.matID == AIR && (getAt(pos + RIGHT + RIGHT).matID == WATER) && Claim(pos + RIGHT))
+			{
+				MoveTo(pos + RIGHT);
+			} else {
+				int directionBias2 = (rand(pos * time) > 0.5)?1:-1;
+				if (getAt(pos.x + directionBias, pos.y).matID == AIR && Claim(ivec2(pos.x + directionBias, pos.y)))
+				{
+					MoveTo(pos.x + directionBias, pos.y);
+				}
+			}
 
-	Particle current = getAt(pos.x, pos.y);
+		// Otherwise, pick a random downward diagonal to go and try and go there
+		} else {
+			int directionBias = (rand(pos * time) > 0.5)?1:-1;
+			if (getAt(pos.x + directionBias, pos.y - 1).matID == AIR && Claim(ivec2(pos.x + directionBias, pos.y - 1))) {
+				MoveTo(pos.x + directionBias, pos.y - 1);
+			}
+		}
+	}
+}
+
+void TickSteam()
+{
+	if(rand(pos * (time + 1)) > 0.7) {
+	int xjitter = rand(pos * time) > 0.5 ? -1 : 1;
+	int yjitter = rand(pos * time + 2) > 0.7 ? -1 : 1;
+	if(getAt(pos.x + xjitter, pos.y + yjitter).matID == AIR && Claim(ivec2(pos.x + xjitter, pos.y + yjitter)))
+	{
+		MoveTo(pos.x + xjitter, pos.y + yjitter);
+	} else if (getAt(pos.x + xjitter, pos.y + yjitter).matID != AIR && getAt(pos.x + xjitter, pos.y + yjitter).matID != STEAM && Claim(pos))  {
+		setAt(pos, WATER);
+	}
+	}
+}
+
+void main() {
+	pos = ivec2(gl_GlobalInvocationID.xy);
+	if(pos.x % 2 == altFrame && pos.y % 2 == altFrame)
+		return;
+
+	current = getAt(pos.x, pos.y);
 
 
 	if(leftClick == 1) {
@@ -191,165 +350,130 @@ void main() {
 		}
 	}
 
-	// Get neighbors
-	Particle nUp = getAt(pos + UP);
-	Particle nUpLeft = getAt(pos + UPLEFT);
-	Particle nUpRight = getAt(pos + UPRIGHT);
-
-	Particle nLeft = getAt(pos + LEFT);
-	Particle nRight = getAt(pos + RIGHT);
-	
-	Particle nDown = getAt(pos + DOWN);
-	Particle nDownLeft = getAt(pos + DOWNLEFT);
-	Particle nDownRight = getAt(pos + DOWNRIGHT);
+	GetNeighbors(pos);
 
 
-	// TODO: Write better functions for swapping two particles, make it easier to swap particles randomly diagonally (like for bubbles)
-	// Need to simplify conditionals
+	if(current.matID > 0) {
+		if(materials[current.matID].category == CAT_POWDER)
+			TickPowder();
 
-	if(current.id > 0) {
-		// Soil
-		if(current.id == SOIL) {
-			if(nDown.id == AIR && Claim(pos + DOWN)) {
-				setAt(pos + DOWN, current.id);
-				setAt(pos, AIR);
-			} else if (nDown.id == WATER || nDown.id == BUBBLE && Claim(pos + DOWN)) { // Sink in water
-				setAt(pos + DOWN, current.id);
-				// Randomly create bubbles
-				if(rand(pos) > 0.01) {
-					setAt(pos, WATER);
-				} else {
-					setAt(pos, BUBBLE);
-				}
-			} else {
-				int directionBias = (rand(pos) > 0.5)?1:-1;
-				// Pick a random direction to go from here
-				if (getAt(pos.x + directionBias, pos.y - 1).id == AIR && Claim(ivec2(pos.x + directionBias, pos.y - 1))) {
-					setAt(pos.x + directionBias, pos.y - 1, current.id);
-					setAt(pos.x, pos.y, AIR);
-				} else if (getAt(pos.x + directionBias, pos.y - 1).id == WATER && Claim(ivec2(pos.x + directionBias, pos.y - 1))) {
-					setAt(pos.x + directionBias, pos.y -1, current.id);
-					setAt(pos, WATER);
-				} 
-				/*else if (getAt(pos.x - directionBias, pos.y - 1).id == 0 && Claim(ivec2(pos.x - directionBias, pos.y - 1))) {
-					setAt(pos.x - directionBias, pos.y -1, current.id);
-					setAt(pos.x, pos.y, 0);
-				}*/
-			}
-			
+		if(materials[current.matID].category == CAT_LIQUID)
+		{
+			TickFluid();
 		}
 
-		// Water
-		if(current.id == WATER) {
-			// If DOWN is free, move DOWN
-			if(nDown.id == AIR && Claim(pos + DOWN)) {
-				setAt(pos + DOWN, current.id);
-				setAt(pos, AIR);
-			} else {
-				// If ALL 3 below are solid, move left or right
-				if(nDownLeft.id != AIR && nDown.id != AIR && nDownRight.id != AIR)
-				{
-					// If the pixel to one side is solid but other side is free, move that way
-					int directionBias = (rand(pos * time) > 0.5)?1:-1;
-					if (getAt(pos.x + directionBias, pos.y).id != AIR && getAt(pos.x - directionBias, pos.y).id == AIR && Claim(ivec2(pos.x - directionBias, pos.y)))
-					{
-						setAt(pos.x - directionBias, pos.y, current.id);
-						setAt(pos, AIR);
-					}
-					// If stranded, bias towards directions featuring water
-					if (nLeft.id == AIR && (getAt(pos + LEFT + LEFT).id == WATER) && Claim(pos + LEFT))
-					{
-						setAt(pos + LEFT, current.id);
-						setAt(pos, AIR);
-					} else if (nRight.id == AIR && (getAt(pos + RIGHT + RIGHT).id == WATER) && Claim(pos + RIGHT))
-					{
-						setAt(pos + RIGHT, current.id);
-						setAt(pos, AIR);
-					} else {
-						int directionBias2 = (rand(pos * time) > 0.5)?1:-1;
-						if (getAt(pos.x + directionBias, pos.y).id == AIR && Claim(ivec2(pos.x + directionBias, pos.y)))
-						{
-							setAt(pos.x + directionBias, pos.y, current.id);
-							setAt(pos, AIR);
-						}
-					}
-
-				// Otherwise, pick a random downward diagonal to go and try and go there
-				} else {
-					int directionBias = (rand(pos * time) > 0.5)?1:-1;
-					if (getAt(pos.x + directionBias, pos.y - 1).id == AIR && Claim(ivec2(pos.x + directionBias, pos.y - 1))) {
-						setAt(pos.x + directionBias, pos.y - 1, current.id);
-						setAt(pos.x, pos.y, AIR);
-					}
-				}
-			}
-		}
-
-		if(current.id == BUBBLE)
+		if(current.matID == BUBBLE)
 		{
 			int jitter = (rand(pos * time) > 0.5)?1:-1;
-			if(nUp.id == WATER && Claim(pos + ivec2(jitter, jitter) + UP))
+			ivec2 target = pos + ivec2(jitter, jitter) + UP;
+			if(getAt(target).matID == WATER && Claim(target))
 			{
-				setAt(pos + ivec2(jitter, jitter) + UP, BUBBLE);
+				setAt(target, BUBBLE);
 				setAt(pos, WATER);
-			} else if (nUp.id == AIR) {
+			} else if (nUp.matID == AIR && nDown.matID == WATER) {
 				setAt(pos.x, pos.y, WATER);
+			} else if (nDown.matID == AIR) {
+				setAt(pos.x, pos.y, AIR);
 			}
 		}
 
-		if (current.id == FIRE)
+		if(current.matID == STEAM)
+		{
+			TickSteam();
+		}
+
+		if (current.matID == FIRE)
 		{
 			int jitter = (rand(pos * time) > 0.5)?1:-1;
 			bool die = (rand(pos * time) > 0.8);
 			bool spread = (rand(pos * time) > 0.8);
 
-			if(nLeft.id != AIR && spread)
+			if(materials[nLeft.matID].flammable)
 			{
+				if(spread)
 				if (Claim(pos + LEFT)) {
 					setAt(pos + LEFT, FIRE);
 				}
+			} else if (nLeft.matID == WATER && Claim(pos + LEFT)) {
+				setAt(pos + LEFT, STEAM);
 			}
 
-			if(nRight.id != AIR && spread)
+			if(materials[nUpLeft.matID].flammable)
 			{
-				if (Claim(pos + RIGHT)) {
-					setAt(pos + RIGHT, FIRE);
-				}
-			}
-
-			if(nUpLeft.id != AIR && spread)
-			{
+				if(spread)
 				if (Claim(pos + UPLEFT)) {
 					setAt(pos + UPLEFT, FIRE);
 				}
+			} else if (nUpLeft.matID == WATER && Claim(pos + UPLEFT)) {
+				setAt(pos + UPLEFT, STEAM);
 			}
 
-			if(nUp.id != AIR && spread)
+			if(materials[nUpRight.matID].flammable)
 			{
+				if(spread)
+				if (Claim(pos + UPRIGHT)) {
+					setAt(pos + UPRIGHT, FIRE);
+				}
+			} else if (nUpRight.matID == WATER && Claim(pos + UPRIGHT)) {
+				setAt(pos + UPRIGHT, STEAM);
+			}
+
+
+			if(materials[nRight.matID].flammable)
+			{
+				if(spread)
+				if (Claim(pos + RIGHT)) {
+					setAt(pos + RIGHT, FIRE);
+				}
+			} else if (nRight.matID == WATER && Claim(pos + RIGHT)) {
+				setAt(pos + RIGHT, STEAM);
+			}
+
+			if(materials[nUp.matID].flammable)
+			{
+				if(spread)
 				if (Claim(pos + UP)) {
-					if(getAt(pos + UP).id == FIRE)
+					if(getAt(pos + UP).matID == FIRE)
 					{
 						setAt(pos, AIR);
 					}
 					setAt(pos + UP, FIRE);
 				}
+			} else if (nUp.matID == WATER && Claim(pos + UP)) {
+				setAt(pos + UP, STEAM);
 			}
 
-			if(nUpRight.id != AIR && spread)
+			if(materials[nDownRight.matID].flammable)
 			{
-				if (Claim(pos + UPRIGHT)) {
-					setAt(pos + UPRIGHT, FIRE);
+				if(spread)
+				if (Claim(pos + DOWNRIGHT)) {
+					setAt(pos + DOWNRIGHT, FIRE);
 				}
+			} else if (nDownRight.matID == WATER && Claim(pos + DOWNRIGHT)) {
+				setAt(pos + DOWNRIGHT, STEAM);
 			}
 
-			if(nDown.id != AIR && spread)
+			if(materials[nDownLeft.matID].flammable)
 			{
+				if(spread)
+				if (Claim(pos + DOWNLEFT)) {
+					setAt(pos + DOWNLEFT, FIRE);
+				}
+			} else if (nDownLeft.matID == WATER && Claim(pos + DOWNLEFT)) {
+				setAt(pos + DOWNLEFT, STEAM);
+			}
+
+			if(materials[nDown.matID].flammable)
+			{
+				if(spread)
 				if (Claim(pos + DOWN)) {
 					setAt(pos + DOWN, FIRE);
 				}
+			} else if (nDown.matID == WATER && Claim(pos + DOWN)) {
+				setAt(pos + DOWN, STEAM);
 			}
 
-			if(nUp.id == AIR && Claim(pos + ivec2(jitter, jitter) + UP)) {
+			if(nUp.matID == AIR && Claim(pos + ivec2(jitter, jitter) + UP)) {
 				if(rand(pos * time) > 0.7) {
 				if(die)
 				{
@@ -370,7 +494,7 @@ void main() {
 	vec3 thisColor = GetColorAt(pos.x, pos.y);
 	vec3 avgColor = (leftColor + rightColor + upColor + downColor + thisColor) / 5;
 
-	vec4 color = vec4(thisColor, 1.0);
+	vec4 color = vec4(avgColor, 1.0);
 
 	imageStore(img, pos, color);
 }

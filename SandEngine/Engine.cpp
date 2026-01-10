@@ -84,6 +84,7 @@ int Engine::InitShaders()
 
 float lastFrameTime = 0.0f;
 int drawingType = 1;
+int altFrame = 0;
 
 void Engine::Step()
 {
@@ -96,7 +97,7 @@ void Engine::Step()
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 
-	if (Time::time > lastFrameTime + 0.016f)
+	if (Time::time > lastFrameTime + 0.008f)
 	{
 		computeShader->Activate();
 
@@ -110,6 +111,9 @@ void Engine::Step()
 
 		int rightClick = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT);
 		computeShader->SetInt("rightClick", rightClick == GLFW_PRESS);
+
+		altFrame = altFrame == 0 ? 1 : 0;
+		computeShader->SetInt("altFrame", altFrame);
 
 		double xpos, ypos;
 		glfwGetCursorPos(window, &xpos, &ypos);
@@ -128,7 +132,7 @@ void Engine::Step()
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, computeShader->claimsBuffer);
 		glBufferData(GL_SHADER_STORAGE_BUFFER, claimsData.size() * sizeof(uint32_t), claimsData.data(), GL_DYNAMIC_COPY);
 
-		computeShader->Execute(WindowWidth / Engine::Downscaling, WindowHeight / Engine::Downscaling);
+		computeShader->Execute(WindowWidth / Engine::Downscaling / 8, WindowHeight / Engine::Downscaling / 8);
 
 		// read m_data and store it in c_data
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, computeShader->modifiedSceneBuffer);
@@ -157,6 +161,10 @@ void Engine::Step()
 		else if (glfwGetKey(window, GLFW_KEY_5) == GLFW_PRESS) {
 			drawingType = 5;
 			log::println("Drawing with fire");
+		}
+		else if (glfwGetKey(window, GLFW_KEY_6) == GLFW_PRESS) {
+			drawingType = 6;
+			log::println("Drawing with sticky!");
 		}
 		computeShader->SetInt("drawingType", drawingType);
 	}
